@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        
+        {
+            "name": "Run SFML App",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/app.exe",
+            "cwd": "${workspaceFolder}",
+            "MIMode": "gdb",
+            "miDebuggerPath": "C:/mingw64/mingw64/bin/gdb.exe",
+            "externalConsole": true
+        }
+    ]
+}
