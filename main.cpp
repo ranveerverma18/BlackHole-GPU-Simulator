@@ -3,13 +3,13 @@
 #include <cmath>
 #include <random>
 #include <algorithm>
-
+using namespace std;
 // ----------------------
 // Simple random helper
 // ----------------------
 float randFloat(float a, float b) {
-    static std::mt19937 rng{ std::random_device{}() };
-    std::uniform_real_distribution<float> dist(a, b);
+    static mt19937 rng{ std::random_device{}() };
+    uniform_real_distribution<float> dist(a, b);
     return dist(rng);
 }
 
@@ -33,36 +33,34 @@ struct SimParams {
 struct GalaxySim {
     SimParams P;
 
-    std::vector<float> posX;
-    std::vector<float> posY;
-    std::vector<float> velX;
-    std::vector<float> velY;
-    std::vector<float> brightness;
+    vector<float> posX;
+    vector<float> posY;
+    vector<float> velX;
+    vector<float> velY;
+    vector<float> brightness;
 
     void init(int count) {
-        posX.resize(count);
+        posX.resize(count);  //buffers for the star data
         posY.resize(count);
         velX.resize(count);
         velY.resize(count);
         brightness.resize(count);
 
         const float R_MIN = 2.0f;
-        const float R_MAX = 30.0f;
+        const float R_MAX = 30.0f; 
 
         for (int i = 0; i < count; ++i) {
             // Radius (biased for denser core)
             float u = randFloat(0.0f, 1.0f);
-            float r = R_MIN + (R_MAX - R_MIN) * std::sqrt(u);
+            float r = R_MIN + (R_MAX - R_MIN) * sqrt(u);  //this allows more stars to be present at the center
             float theta = randFloat(0.0f, 2.0f * 3.14159265f);
 
-            float x = r * std::cos(theta);
-            float y = r * std::sin(theta);
-
+            float x = r * cos(theta);
+            float y = r * sin(theta);
             posX[i] = x;
             posY[i] = y;
 
-            float dist = std::max(std::sqrt(x * x + y * y), 0.1f);
-
+            float dist = std::max(sqrt(x * x + y * y), 0.1f);
             // radial + tangential directions
             float rx = x / dist;
             float ry = y / dist;
@@ -70,10 +68,10 @@ struct GalaxySim {
             float tx = -ry;
             float ty =  rx;
 
-            // approximate circular velocity (BH + halo)
-            float v_bh = std::sqrt(P.G * P.M_bh / (dist + P.softening));
+            // approximate circular velocity (BH + halo)(velocity needed to orbit without falling in)
+            float v_bh = sqrt(P.G * P.M_bh / (dist + P.softening));//gravity never becomes infinite or unstable due to softening
             float v_dm = P.v0;
-            float v_circ = std::sqrt(v_bh * v_bh + v_dm * v_dm);
+            float v_circ = sqrt(v_bh * v_bh + v_dm * v_dm);
 
             // more aggressive disc spin, tiny jitter → spiral structure
             float jitter = randFloat(-0.05f, 0.05f);
@@ -92,7 +90,7 @@ struct GalaxySim {
             float x = posX[i];
             float y = posY[i];
 
-            float dist = std::sqrt(x * x + y * y) + 1e-3f;
+            float dist = sqrt(x * x + y * y) + 1e-3f;
             float invDist = 1.0f / dist;
 
             // direction towards center
@@ -112,7 +110,7 @@ struct GalaxySim {
             float ax = a_bh_x + a_dm_x;
             float ay = a_bh_y + a_dm_y;
 
-            // semi-implicit Euler
+            // semi-implicit Euler(stable for the orbits)(if we dont use them and use the explicit euler the stars will fly away very quickly)
             velX[i] += ax * P.dt;
             velY[i] += ay * P.dt;
 
@@ -126,8 +124,8 @@ struct GalaxySim {
 // Color based on speed + brightness
 // ----------------------
 sf::Color starColor(float vx, float vy, float bright) {
-    float speed = std::sqrt(vx * vx + vy * vy);
-    float t = std::clamp(speed / 6.0f, 0.0f, 1.0f); // tune 6.0f if needed
+    float speed = sqrt(vx * vx + vy * vy);
+    float t = clamp(speed / 6.0f, 0.0f, 1.0f); // tune 6.0f if needed
 
     // interpolate: inner fast → blue/white, outer slow → pinkish
     sf::Uint8 r = static_cast<sf::Uint8>(220 * (0.5f + 0.5f * t));
