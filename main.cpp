@@ -4,6 +4,7 @@
 #include <random>
 #include <algorithm>
 using namespace std;
+
 // ----------------------
 // Simple random helper
 // ----------------------
@@ -25,6 +26,15 @@ struct SimParams {
     float r_core    = 1.2f;     // halo core radius
 
     float dt        = 0.01f;    // time step
+
+    // ------- PHASE 3: Accretion Disk Parameters -------
+    float viscosityBase  = 0.003f;   // base friction strength
+    float viscosityCore  = 1.0f;     // prevents infinite viscosity near r → 0
+    float heatScale      = 0.0012f;  // controls brightness generation
+    float brightnessCool = 0.997f;   // glow cool-down factor
+    float horizonRadius  = 7.0f;     // event horizon swallow radiusk
+    float respawnRMin    = 18.0f;    // outer disk respawn range
+    float respawnRMax    = 28.0f;
 };
 
 // ----------------------
@@ -38,6 +48,39 @@ struct GalaxySim {
     vector<float> velX;
     vector<float> velY;
     vector<float> brightness;
+
+    // ---------------------------------------------
+    // Respawn particle when it falls into the BH
+    // ---------------------------------------------
+    void respawnAtOuterRing(int i) {
+        float u = randFloat(0.0f, 1.0f);
+        float r = P.respawnRMin + (P.respawnRMax - P.respawnRMin) * u;
+        float theta = randFloat(0.0f, 2.0f * 3.14159265f);
+
+        float x = r * cos(theta);
+        float y = r * sin(theta);
+
+        posX[i] = x;
+        posY[i] = y;
+
+        float dist = max(sqrt(x * x + y * y), 0.1f);
+        float rx = x / dist;
+        float ry = y / dist;
+        float tx = -ry;
+        float ty =  rx;
+
+        float v_bh = sqrt(P.G * P.M_bh / (dist + P.softening)); // circular velocity from BH
+        float v_dm = P.v0;                                        // dark matter halo
+        float v_circ = sqrt(v_bh * v_bh + v_dm * v_dm);
+
+        float jitter = randFloat(-0.05f, 0.05f);
+        float v = v_circ * 1.4f * (1.0f + jitter);  // slightly calmer than init()
+
+        velX[i] = tx * v;
+        velY[i] = ty * v;
+
+        brightness[i] = 0.6f;  // moderate brightness
+    }
 
     void init(int count) {
         posX.resize(count);  //buffers for the star data
@@ -116,6 +159,40 @@ struct GalaxySim {
 
             posX[i] += velX[i] * P.dt;
             posY[i] += velY[i] * P.dt;
+
+            // --------------------------------------------------
+            // ------- PHASE 3: ACCRETION DISK PHYSICS -----------
+            // --------------------------------------------------
+
+            // 1) viscosity coefficient
+            float eta = P.viscosityBase / (dist + P.viscosityCore);
+            if (eta > 0.02f) eta = 0.02f;  // clamp for safety
+
+            // 2) compute speed^2 for heating
+            float vx = velX[i];
+            float vy = velY[i];
+            float speed2 = vx*vx + vy*vy;
+
+            // 3) heating = energy lost due to viscosity
+            float heat = P.heatScale * eta * speed2;
+            brightness[i] += heat;
+
+            // keep brightness within reasonable range
+            if (brightness[i] > 2.0f) brightness[i] = 2.0f;
+
+            // 4) apply viscosity damping → inward spiral
+            float damp = 1.0f - eta;
+            velX[i] *= damp;
+            velY[i] *= damp;
+
+            // 5) brightness cooling
+            brightness[i] *= P.brightnessCool;
+            if (brightness[i] < 0.2f) brightness[i] = 0.2f;
+
+            // 6) event horizon check
+            if (dist < P.horizonRadius) {
+                respawnAtOuterRing(i);  // particle gets swallowed
+            }
         }
     }
 };
@@ -127,14 +204,12 @@ sf::Color starColor(float vx, float vy, float bright) {
     float speed = sqrt(vx * vx + vy * vy);
     float t = clamp(speed / 6.0f, 0.0f, 1.0f); // tune 6.0f if needed
 
-    // interpolate: inner fast → blue/white, outer slow → pinkish
-    sf::Uint8 r = static_cast<sf::Uint8>(220 * (0.5f + 0.5f * t));
-    sf::Uint8 g = static_cast<sf::Uint8>(180 * (0.8f - 0.3f * t));
-    sf::Uint8 b = static_cast<sf::Uint8>(255 * (1.0f - 0.2f * t) + 40 * t);
+    // Brighter = hotter = more orange/yellow
+    float glow = min(bright, 2.0f);
 
-    r = static_cast<sf::Uint8>(r * bright);
-    g = static_cast<sf::Uint8>(g * bright);
-    b = static_cast<sf::Uint8>(b * bright);
+    sf::Uint8 r = static_cast<sf::Uint8>(220 * glow);
+    sf::Uint8 g = static_cast<sf::Uint8>(140 * glow);
+    sf::Uint8 b = static_cast<sf::Uint8>(80  * glow + 60 * t);
 
     return sf::Color(r, g, b);
 }
@@ -249,5 +324,6 @@ int main() {
 
     return 0;
 }
+
 
 
